@@ -61,7 +61,7 @@ final class Content
         'acc_a'    => 'THE',
         'acc_b'    => 'DATA',
         'acc_lede' => 'Where the number comes from, said plainly.',
-        'acc_body' => "This checks Google organic results through SerpApi, using the country and language you select. It returns a neutral, unpersonalised position, which is the number worth tracking week to week.\n\nYour own browser shows something different because it knows your location, your history and your account. A rank checker has none of that, so the same query run twice returns the same answer. That is what makes it a baseline.\n\nUse it as a baseline and it will serve you well. Semrush states the same thing on their own free checker.",
+        'acc_body' => "This checks live Google organic results from our own search worker, using the country and language you select. It returns a neutral, unpersonalised position, which is the number worth tracking week to week.\n\nYour own browser shows something different because it knows your location, your history and your account. A rank checker has none of that, so the same query run twice returns the same answer. That is what makes it a baseline.\n\nUse it as a baseline and it will serve you well. Semrush states the same thing on their own free checker.",
 
         /* ------------------------------------------------------------- ai */
         'ai_a'    => 'RANK IS NOT',
@@ -151,7 +151,6 @@ final class Content
         ['Ahrefs: AI Overviews reduce clicks, December 2025 update', 'https://ahrefs.com/blog/ai-overviews-reduce-clicks-update'],
         ['Seer Interactive: AI Overview impact on Google CTR, 2026', 'https://www.seerinteractive.com/insights/aio-impact-on-google-ctr-2026-update'],
         ['Search Engine Land: AI Overviews CTR recovery study', 'https://searchengineland.com/google-ai-overviews-ctr-recovery-study-475566'],
-        ['SerpApi: Google Search API documentation', 'https://serpapi.com/search-api'],
     ];
 
     /** FAQ pairs. Also published as FAQPage structured data. */

@@ -2,7 +2,6 @@
 defined('DF_ENTRY') || exit(header('HTTP/1.1 404 Not Found'));
 /** @var array $daily */
 $peak = max(1, max($daily));
-$budgetPct = $budgetMax > 0 ? (int) round(100 * $budgetUsed / $budgetMax) : 0;
 $pageTitle = 'Dashboard';
 $current   = '';
 ob_start();
@@ -17,11 +16,6 @@ ob_start();
     <p class="k">Checks today</p>
     <p class="v"><?= (int) $checksToday ?></p>
     <p class="n"><?= (int) $visitorsToday ?> distinct visitors</p>
-  </div>
-  <div class="card<?= $budgetPct >= 80 ? ' alert' : '' ?>">
-    <p class="k">API budget</p>
-    <p class="v"><?= (int) $budgetUsed ?><span style="font-size:1rem;color:var(--ink-3)">/<?= (int) $budgetMax ?></span></p>
-    <p class="n"><?= $budgetPct ?> percent used, resets at midnight UTC</p>
   </div>
   <div class="card">
     <p class="k">Found rate</p>
@@ -58,9 +52,9 @@ ob_start();
   </div>
   <form method="post" action="<?= e(admin_url('test')) ?>" style="margin-top:16px">
     <input type="hidden" name="csrf" value="<?= e($csrf) ?>">
-    <button type="submit" class="btn ghost">Run a live provider test</button>
+    <button type="submit" class="btn ghost">Check the rank worker</button>
   </form>
-  <p class="hint" style="margin:10px 0 0">The test runs one real search and reports the exact upstream error. It spends one API call.</p>
+  <p class="hint" style="margin:10px 0 0">Calls the worker's /health endpoint. It does not run a Google search.</p>
 </div>
 
 <div class="box rebuild-row">

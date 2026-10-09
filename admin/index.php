@@ -141,7 +141,6 @@ if ($sub === 'settings') {
         $numeric = [
             'daily_limit'      => [1, 50],
             'burst_per_minute' => [1, 60],
-            'api_budget_day'   => [1, 10000],
             'cache_ttl_hours'  => [1, 168],
             'max_depth'        => [1, 5],
             'retention_days'   => [7, 730],
@@ -152,22 +151,11 @@ if ($sub === 'settings') {
             }
         }
 
-        App::setSetting('provider', 'serpapi');
-
         App::setSetting('maintenance', isset($_POST['maintenance']) ? '1' : '0');
         App::setSetting('trust_proxy', isset($_POST['trust_proxy']) ? '1' : '0');
         $note = trim((string) ($_POST['maintenance_note'] ?? ''));
         if ($note !== '') {
             App::setSetting('maintenance_note', mb_substr($note, 0, 300));
-        }
-
-        // Credentials are written only when a new value is supplied, and always encrypted.
-        foreach (['provider_serpapi_api_key'] as $field) {
-            $v = trim((string) ($_POST[$field] ?? ''));
-            if ($v !== '') {
-                App::setSetting($field, $v, true);
-                App::audit($actor, 'settings.credential', $field);
-            }
         }
 
         // Limits and depth appear on the public page, so the static file has to follow.
@@ -217,12 +205,11 @@ if ($sub === 'bans') {
 /* ---------------------------------------------------------------- provider test */
 
 if ($sub === 'test' && $isPost) {
-    $provider = ProviderFactory::make();
-    $res = $provider->fetchPage('seo services', 'uk', 'en', 1);
+    $res = RankCheck::workerHealth();
     App::audit($actor, 'provider.test', $res['ok'] ? 'ok' : $res['error']);
     $flash = $res['ok']
-        ? ['good', 'Provider works. ' . count($res['items']) . ' results returned, and that test used one API call.']
-        : ['bad', 'Provider failed: ' . $res['error']];
+        ? ['good', 'Rank worker is online (' . $res['detail'] . ').']
+        : ['bad', 'Rank worker check failed: ' . $res['error']];
 }
 
 /* ---------------------------------------------------------------- rebuild */
@@ -255,7 +242,7 @@ $pageFile = public_root() . '/index.html';
 
 /* Everything that has to be true for the public checker to work. If the page shows
    "Checker unavailable", the answer is in this list. */
-$creds  = App::providerCredentials('serpapi');
+$workerSet = trim((string) App::config('rank_worker_url', '')) !== '' && trim((string) App::config('rank_worker_secret', '')) !== '';
 $system = [
     ['PHP 8.1 or newer', PHP_VERSION_ID >= 80100, PHP_VERSION],
     ['cURL extension', function_exists('curl_init'), 'needed to reach the search provider'],
@@ -263,7 +250,7 @@ $system = [
     ['Database writable', is_writable(dirname($dbFile)) && (!is_file($dbFile) || is_writable($dbFile)), basename(dirname($dbFile)) . ' directory'],
     ['Encryption key valid', (static function () { try { App::encrypt('probe'); return true; } catch (Throwable $e) { return false; } })(), 'app_key in config.php'],
     ['Static page writable', is_file($pageFile) ? is_writable($pageFile) : is_writable(dirname($pageFile)), 'index.html, needed to publish content'],
-    ['Provider credentials set', !empty($creds['api_key']), ProviderFactory::label('serpapi')],
+    ['Rank worker configured', $workerSet, 'RANK_WORKER_URL and RANK_WORKER_SECRET'],
     ['site_url matches this host', str_contains((string) App::config('site_url'), (string) ($_SERVER['HTTP_HOST'] ?? '')), (string) App::config('site_url')],
 ];
 
@@ -274,14 +261,12 @@ view('admin_dash', [
     'today'         => $today,
     'checksToday'   => (int) Db::scalar('SELECT COUNT(*) FROM checks WHERE day = ?', [$today]),
     'visitorsToday' => (int) Db::scalar('SELECT COUNT(DISTINCT visitor) FROM checks WHERE day = ?', [$today]),
-    'budgetUsed'    => RateLimiter::budgetUsed(),
-    'budgetMax'     => App::settingInt('api_budget_day'),
     'foundRate'     => (int) Db::scalar('SELECT ROUND(100.0 * SUM(found) / COUNT(*)) FROM checks WHERE ts > ?', [$since]),
     'cacheRows'     => (int) Db::scalar('SELECT COUNT(*) FROM serp_cache'),
     'dbSize'        => is_file($dbFile) ? (int) filesize($dbFile) : 0,
     'pageBuilt'     => SiteBuilder::lastBuild(),
     'pageSize'      => is_file($pageFile) ? (int) filesize($pageFile) : 0,
-    'provider'      => ProviderFactory::label('serpapi'),
+    'provider'      => 'Doctorfizz VPS worker (Playwright)',
     'system'        => $system,
     'daily'         => $daily,
     'topKeywords'   => Db::all('SELECT keyword, COUNT(*) AS n FROM checks WHERE ts > ? GROUP BY keyword ORDER BY n DESC LIMIT 10', [$since]),

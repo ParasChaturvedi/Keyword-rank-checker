@@ -37,7 +37,7 @@ if (!function_exists('mb_substr')) {
     }
 }
 
-foreach (['App', 'Db', 'Security', 'Geo', 'Content', 'RateLimiter', 'Serp', 'RankCheck', 'SiteBuilder'] as $lib) {
+foreach (['App', 'Db', 'Security', 'Geo', 'Content', 'RateLimiter', 'RankCheck', 'SiteBuilder'] as $lib) {
     require_once __DIR__ . '/lib/' . $lib . '.php';
 }
 

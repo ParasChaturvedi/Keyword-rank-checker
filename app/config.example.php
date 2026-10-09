@@ -2,7 +2,7 @@
 defined('DF_ENTRY') || exit(header('HTTP/1.1 404 Not Found'));
 
 /**
- * DoctorFizz Rank Checker configuration, SerpApi-only build.
+ * DoctorFizz Rank Checker configuration (VPS rank worker build).
  *
  * Copy to config.php and fill in the values. Keep this file server-side.
  */
@@ -24,12 +24,9 @@ return [
         'pass_hash' => '',
     ],
 
-    // The only search provider used by this build.
-    'providers' => [
-        'serpapi' => [
-            'api_key' => 'YOUR_SERPAPI_API_KEY',
-        ],
-    ],
+    // The only search provider: the Doctorfizz VPS rank worker.
+    'rank_worker_url'    => 'https://187-127-186-47.sslip.io',
+    'rank_worker_secret' => 'SAME_VALUE_AS_WORKER_SECRET_ON_THE_VPS',
 
     'db_path' => null,
     'debug' => false,

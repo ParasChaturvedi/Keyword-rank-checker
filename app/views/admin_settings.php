@@ -3,15 +3,12 @@ defined('DF_ENTRY') || exit(header('HTTP/1.1 404 Not Found'));
 /** @var string $csrf */
 /** @var array|null $flash */
 
-$hasSerpApi = App::providerCredentials('serpapi');
-$serpApiSet = !empty($hasSerpApi['api_key']);
-
 $pageTitle = 'Settings';
 $current   = 'settings';
 ob_start();
 ?>
 <h1 class="a-title">Settings</h1>
-<p class="a-sub">Limits, SerpApi and maintenance. This build uses SerpApi only.</p>
+<p class="a-sub">Limits and maintenance. Searches run on the Doctorfizz VPS rank worker.</p>
 
 <?php if ($flash !== null): ?><p class="flash <?= e($flash[0]) ?>"><?= e($flash[1]) ?></p><?php endif; ?>
 
@@ -20,7 +17,7 @@ ob_start();
 
   <div class="box">
     <h2>Limits</h2>
-    <p class="hint">The daily visitor limit and whole-tool API budget protect your SerpApi allowance.</p>
+    <p class="hint">The daily visitor limit and burst guard protect the rank worker from abuse.</p>
     <div class="f-row">
       <label class="f">
         <span>Checks per visitor per day</span>
@@ -33,11 +30,6 @@ ob_start();
         <small>Burst guard against scripted loops.</small>
       </label>
       <label class="f">
-        <span>SerpApi calls per day, whole tool</span>
-        <input type="number" name="api_budget_day" min="1" max="10000" value="<?= (int) App::settingInt('api_budget_day') ?>">
-        <small>Set this below the SerpApi allowance you want the checker to consume.</small>
-      </label>
-      <label class="f">
         <span>Cache lifetime, hours</span>
         <input type="number" name="cache_ttl_hours" min="1" max="168" value="<?= (int) App::settingInt('cache_ttl_hours') ?>">
         <small>Identical checks inside this window use the local cache.</small>
@@ -45,7 +37,7 @@ ob_start();
       <label class="f">
         <span>Maximum scan depth, pages</span>
         <input type="number" name="max_depth" min="1" max="5" value="<?= (int) App::settingInt('max_depth') ?>">
-        <small>Each page can use one SerpApi search.</small>
+        <small>Each page is one Google results page fetched by the worker.</small>
       </label>
       <label class="f">
         <span>Keep check history, days</span>
@@ -53,16 +45,6 @@ ob_start();
         <small>Older rows are pruned automatically.</small>
       </label>
     </div>
-  </div>
-
-  <div class="box">
-    <h2>Search provider</h2>
-    <p class="hint">SerpApi is the only search provider in this build.</p>
-    <input type="hidden" name="provider" value="serpapi">
-    <label class="f">
-      <span>SerpApi API key <?= $serpApiSet ? '<span class="pill ok">set</span>' : '<span class="pill no">missing</span>' ?></span>
-      <input type="password" name="provider_serpapi_api_key" autocomplete="new-password" placeholder="<?= $serpApiSet ? 'Leave blank to keep the current key' : 'Paste your SerpApi private key' ?>">
-    </label>
   </div>
 
   <div class="box">
@@ -83,7 +65,6 @@ ob_start();
 
   <div class="sticky-save">
     <button type="submit" class="btn">Save settings</button>
-    <p>Credential fields left blank keep their current value.</p>
   </div>
 </form>
 <?php

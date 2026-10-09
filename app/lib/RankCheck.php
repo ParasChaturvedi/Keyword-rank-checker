@@ -131,33 +131,13 @@ final class RankCheck
         return $host;
     }
 
-    private static function providerMode(): string
-    {
-        $mode = strtolower(
-            trim(
-                (string) App::config(
-                    'rank_provider_mode',
-                    'hybrid'
-                )
-            )
-        );
-
-        return in_array(
-            $mode,
-            ['hybrid', 'vps_only'],
-            true
-        )
-            ? $mode
-            : 'hybrid';
-    }
-
     public static function cacheKey(array $d): string
     {
         return hash(
             'sha256',
             implode('|', [
-                'rank-v3',
-                self::providerMode(),
+                'rank-v4',
+                'vps_playwright',
                 $d['keyword'],
                 $d['domain'],
                 $d['gl'],
@@ -273,8 +253,8 @@ final class RankCheck
      * → DataImpulse
      * → Google
      *
-     * If worker fails, times out or Google blocks it,
-     * return null so SerpApi automatically becomes fallback.
+     * If the worker fails, times out or Google blocks it, the failure is
+     * returned as-is. There is no third-party fallback.
      */
     private static function workerFailure(
         string $error,
@@ -512,219 +492,63 @@ final class RankCheck
     }
 
     /**
-     * VPS worker is primary.
-     * Existing SerpApi provider remains fallback.
+     * Admin diagnostic: is the VPS worker reachable and ready?
+     * Uses GET /health, so no Google search is spent.
+     *
+     * @return array{ok:bool, error:string, detail:string}
      */
-    public static function run(
-        array $d,
-        SerpProvider $provider,
-        int $budgetLeft
-    ): array {
-        /*
-         * PRIMARY
-         *
-         * VPS
-         * → Playwright
-         * → DataImpulse
-         * → Google
-         */
-        $mode =
-            self::providerMode();
+    public static function workerHealth(): array
+    {
+        $base = rtrim(trim((string) App::config('rank_worker_url', '')), '/');
 
-        $workerResult =
-            self::tryVpsWorker($d);
-
-        /*
-         * VPS succeeded:
-         * use it in both hybrid and vps_only mode.
-         */
-        if ($workerResult['ok']) {
-            return $workerResult;
+        if ($base === '' || trim((string) App::config('rank_worker_secret', '')) === '') {
+            return ['ok' => false, 'error' => 'RANK_WORKER_URL / RANK_WORKER_SECRET are not set.', 'detail' => ''];
         }
 
-        /*
-         * VPS-only diagnostic mode:
-         * never touch SerpApi.
-         */
-        if ($mode === 'vps_only') {
-            return $workerResult;
+        if (!function_exists('curl_init')) {
+            return ['ok' => false, 'error' => 'cURL is unavailable.', 'detail' => ''];
         }
 
-        /*
-         * Hybrid mode:
-         * VPS failed, so continue into the existing
-         * SerpApi fallback code below.
-         */
+        $ch = curl_init($base . '/health');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HTTPHEADER => ['Accept: application/json'],
+        ]);
+        $body = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err = curl_error($ch);
+        curl_close($ch);
 
-        /*
-         * FALLBACK
-         *
-         * Existing SerpApi implementation.
-         */
-        $results = [];
+        $data = is_string($body) ? json_decode($body, true) : null;
 
-        $position = null;
-
-        $apiCalls = 0;
-
-        $error = '';
-
-        for (
-            $page = 1;
-            $page <= $d['depth'];
-            $page++
-        ) {
-            if ($apiCalls >= $budgetLeft) {
-                $error =
-                    'The full requested search range could not be checked because the daily provider allowance was reached.';
-
-                break;
-            }
-
-            $start =
-                ($page - 1) * 10 + 1;
-
-            $res =
-                $provider->fetchPage(
-                    $d['keyword'],
-                    $d['gl'],
-                    $d['hl'],
-                    $start
-                );
-
-            $apiCalls++;
-
-            if (!$res['ok']) {
-                if ($results === []) {
-                    return [
-                        'ok' => false,
-
-                        'error' =>
-                            $res['error'],
-
-                        'results' =>
-                            [],
-
-                        'position' =>
-                            null,
-
-                        'found' =>
-                            false,
-
-                        'scanned' =>
-                            0,
-
-                        'api_calls' =>
-                            $apiCalls,
-
-                        'provider' =>
-                            $provider->name(),
-                    ];
-                }
-
-                $error =
-                    $res['error'];
-
-                break;
-            }
-
-            if ($res['items'] === []) {
-                break;
-            }
-
-            foreach (
-                $res['items']
-                as $i => $item
-            ) {
-                $rank =
-                    isset($item['position'])
-                        ? (int) $item['position']
-                        : ($start + $i);
-
-                $match =
-                    self::linkMatchesDomain(
-                        $item['link'],
-                        $d['domain']
-                    );
-
-                $results[] = [
-                    'rank' =>
-                        $rank,
-
-                    'title' =>
-                        Security::safeSnippet(
-                            $item['title']
-                        ),
-
-                    'link' =>
-                        $item['link'],
-
-                    'snippet' =>
-                        Security::safeSnippet(
-                            $item['snippet']
-                        ),
-
-                    'match' =>
-                        $match,
-                ];
-
-                if (
-                    $match &&
-                    $position === null
-                ) {
-                    $position =
-                        $rank;
-                }
-            }
-
-            if ($position !== null) {
-                break;
-            }
+        if (!is_array($data) || $status !== 200) {
+            return ['ok' => false, 'error' => $err !== '' ? $err : 'HTTP ' . $status, 'detail' => ''];
         }
 
-        /*
-         * Never return an incomplete SerpApi scan as a successful
-         * "not ranked" result. If a requested page failed or the
-         * provider budget ran out mid-check, surface an upstream
-         * failure instead of misleading the user.
-         */
-        if ($error !== '') {
-            return [
-                'ok' => false,
-                'error' => $error,
-                'results' => [],
-                'position' => null,
-                'found' => false,
-                'scanned' => 0,
-                'api_calls' => $apiCalls,
-                'provider' => $provider->name(),
-            ];
+        if (empty($data['browser_ready'])) {
+            return ['ok' => false, 'error' => 'worker is up but its browser is not ready', 'detail' => ''];
         }
+
+        $cool = (int) ($data['direct_cooldown_seconds'] ?? 0);
 
         return [
-            'ok' => true,
-
-            'error' =>
-                '',
-
-            'results' =>
-                $results,
-
-            'position' =>
-                $position,
-
-            'found' =>
-                $position !== null,
-
-            'scanned' =>
-                count($results),
-
-            'api_calls' =>
-                $apiCalls,
-
-            'provider' =>
-                $provider->name(),
+            'ok' => $cool === 0,
+            'error' => $cool > 0 ? 'Google challenged the worker; cooling down for ' . $cool . 's' : '',
+            'detail' => 'v' . (string) ($data['version'] ?? '?') . ', queue ' . (int) ($data['queued'] ?? 0),
         ];
+    }
+
+    /**
+     * Rank check through the Doctorfizz VPS worker
+     * (Playwright + headed Chrome on the VPS). This is the only provider.
+     */
+    public static function run(array $d): array
+    {
+        return self::tryVpsWorker($d);
     }
 
     /**

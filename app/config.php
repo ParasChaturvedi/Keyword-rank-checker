@@ -27,8 +27,8 @@ return [
     'ip_pepper' => (string) (getenv('IP_PEPPER') ?: ''),
 
     /*
-     * Primary rank provider:
-     * VPS → Playwright → DataImpulse → Google
+     * Rank provider (the only one):
+     * Doctorfizz VPS worker → Playwright (headed Chrome) → Google
      */
     'rank_worker_url' => rtrim(
         (string) (getenv('RANK_WORKER_URL') ?: ''),
@@ -39,41 +39,9 @@ return [
         getenv('RANK_WORKER_SECRET') ?: ''
     ),
 
-    /*
-     * Rank provider mode:
-     *
-     * hybrid
-     *   VPS first, then SerpApi fallback
-     *
-     * vps_only
-     *   VPS only, no SerpApi fallback
-     *
-     * Default remains hybrid so current live
-     * functionality is not affected.
-     */
-    'rank_provider_mode' => strtolower(
-        trim(
-            (string) (
-                getenv('RANK_PROVIDER_MODE') ?: 'hybrid'
-            )
-        )
-    ),
-
     'admin_bootstrap' => [
         'username'  => 'admin',
         'pass_hash' => '',
-    ],
-
-    /*
-     * Fallback provider.
-     * Keep SerpApi configured while hybrid mode is available.
-     */
-    'providers' => [
-        'serpapi' => [
-            'api_key' => (string) (
-                getenv('SERPAPI_KEY') ?: ''
-            ),
-        ],
     ],
 
     'db_path' => getenv('VERCEL')

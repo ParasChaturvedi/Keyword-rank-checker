@@ -6,11 +6,8 @@ define('DF_ENTRY', true);
 /**
  * Public JSON API for DoctorFizz Rank Checker.
  *
- * Primary:
- * VPS → Playwright → DataImpulse → Google
- *
- * Fallback:
- * SerpApi
+ * Provider (the only one):
+ * VPS worker → Playwright (headed Chrome) → Google
  */
 
 if (!is_file(__DIR__ . '/../app/config.php')) {
@@ -94,25 +91,6 @@ if ($action === '') {
 }
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-
-$rankProviderMode = strtolower(
-    trim(
-        (string) App::config(
-            'rank_provider_mode',
-            'hybrid'
-        )
-    )
-);
-
-if (
-    !in_array(
-        $rankProviderMode,
-        ['hybrid', 'vps_only'],
-        true
-    )
-) {
-    $rankProviderMode = 'hybrid';
-}
 
 /* -------------------------------------------------------------
  * Session
@@ -201,7 +179,7 @@ if ($action === 'health') {
             );
 
     /*
-     * Hybrid provider configuration
+     * Rank worker configuration
      */
 
     $workerUrl = trim(
@@ -222,23 +200,8 @@ if ($action === 'health') {
         $workerUrl !== '' &&
         $workerSecret !== '';
 
-    $creds =
-        App::providerCredentials(
-            'serpapi'
-        );
-
-    $checks['serpapi_fallback_configured'] =
-        !empty(
-            $creds['api_key']
-        );
-
-    /*
-     * Tool is considered configured if
-     * either provider is available.
-     */
     $checks['provider_configured'] =
-        $checks['vps_worker_configured'] ||
-        $checks['serpapi_fallback_configured'];
+        $checks['vps_worker_configured'];
 
     $criticalChecks = $checks;
 
@@ -257,8 +220,8 @@ if ($action === 'health') {
                 true
             ),
 
-        'provider_mode' =>
-            $rankProviderMode,
+        'provider' =>
+            'vps_playwright',
 
         'checks' =>
             $checks,
@@ -449,8 +412,6 @@ if (
             ) .
             ' checks for today.',
 
-        RateLimiter::BUDGET =>
-            'The tool has used its whole search allowance for today. It resets at midnight UTC.',
     ];
 
     json_out([
@@ -495,32 +456,11 @@ if ($cached !== null) {
 }
 
 /* -------------------------------------------------------------
- * Rank provider
- *
- * RankCheck now handles:
- *
- * 1. VPS + Playwright + DataImpulse
- * 2. SerpApi fallback
+ * Rank provider: Doctorfizz VPS worker (Playwright) only
  * ------------------------------------------------------------- */
 
-$provider =
-    ProviderFactory::make();
-
-$budgetLeft =
-    max(
-        0,
-        App::settingInt(
-            'api_budget_day'
-        ) -
-        RateLimiter::budgetUsed()
-    );
-
 $result =
-    RankCheck::run(
-        $d,
-        $provider,
-        $budgetLeft
-    );
+    RankCheck::run($d);
 
 /* -------------------------------------------------------------
  * Upstream failure
@@ -545,11 +485,8 @@ if (!$result['ok']) {
         'provider' =>
             (string) (
                 $result['provider'] ??
-                $provider->name()
+                'vps_playwright'
             ),
-
-        'provider_mode' =>
-            $rankProviderMode,
 
         'remaining' =>
             RateLimiter::remaining(
@@ -582,22 +519,13 @@ if (!$result['ok']) {
  * ------------------------------------------------------------- */
 
 RateLimiter::consume(
-    $visitor,
-    $result['api_calls']
+    $visitor
 );
-
-/*
- * Actual provider used:
- *
- * vps_playwright
- * OR
- * serpapi
- */
 
 $actualProvider =
     (string) (
         $result['provider'] ??
-        $provider->name()
+        'vps_playwright'
     );
 
 /* -------------------------------------------------------------
@@ -700,20 +628,8 @@ $payload = [
     'notice' =>
         $result['error'],
 
-    /*
-     * Makes testing easy.
-     *
-     * Expected:
-     *
-     * vps_playwright
-     * OR
-     * serpapi
-     */
     'provider' =>
         $actualProvider,
-
-    'provider_mode' =>
-        $rankProviderMode,
 
     'checked_at' =>
         time(),

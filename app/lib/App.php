@@ -15,10 +15,9 @@ final class App
     private static array $content = [];
 
     public const DEFAULT_SETTINGS = [
-        'provider'          => 'serpapi',
+        'provider'          => 'vps_playwright',
         'daily_limit'       => '5',
         'burst_per_minute'  => '8',
-        'api_budget_day'    => '90',
         'cache_ttl_hours'   => '12',
         'max_depth'         => '5',
         'maintenance'       => '0',
@@ -54,20 +53,6 @@ final class App
         }
         $token = substr(hash_hmac('sha256', 'sqlite-file', (string) self::$config['app_key']), 0, 24);
         return dirname(__DIR__) . '/data/rc-' . $token . '.sqlite';
-    }
-
-    public static function providerCredentials(string $provider): array
-    {
-        $fromFile = self::$config['providers'][$provider] ?? [];
-        $fromDb   = [];
-        foreach (['api_key'] as $field) {
-            $v = self::setting('provider_' . $provider . '_' . $field, '');
-            if ($v !== '') {
-                $fromDb[$field] = $v;
-            }
-        }
-        // Values set in the admin panel take precedence over the config file.
-        return array_merge($fromFile, $fromDb);
     }
 
     /* ---------------------------------------------------------------- settings */

@@ -3,13 +3,12 @@ declare(strict_types=1);
 defined('DF_ENTRY') || exit(header('HTTP/1.1 404 Not Found'));
 
 /**
- * Three independent layers, because each one catches a different attacker.
+ * Two independent layers, because each one catches a different attacker.
  *
  *   1. Burst      short sliding window, stops a naive loop immediately
  *   2. Daily      the product rule, per visitor, server side only
- *   3. Budget     ceiling on SerpApi fallback calls, protects quota and cost
  *
- * The cache sits in front of all three, so a repeated identical request is free and does
+ * The cache sits in front of both, so a repeated identical request is free and does
  * not consume the daily allowance either.
  */
 final class RateLimiter
@@ -18,7 +17,6 @@ final class RateLimiter
     public const BANNED      = 'banned';
     public const BURST       = 'burst';
     public const DAILY       = 'daily';
-    public const BUDGET      = 'budget';
     public const MAINTENANCE = 'maintenance';
 
     public static function today(): string
@@ -47,14 +45,6 @@ final class RateLimiter
         return max(
             0,
             App::settingInt('daily_limit') - self::used($visitor)
-        );
-    }
-
-    public static function budgetUsed(): int
-    {
-        return (int) Db::scalar(
-            'SELECT calls FROM budget_day WHERE day = ?',
-            [self::today()]
         );
     }
 
@@ -107,52 +97,27 @@ final class RateLimiter
          * Cached responses are free:
          * - no daily allowance consumed
          * - no VPS request
-         * - no SerpApi request
          */
         if (!$willCallApi) {
             return $out(self::OK);
         }
 
         /*
-         * The visitor daily limit still applies regardless of which
-         * provider eventually answers the request.
+         * The visitor daily limit applies to every fresh check.
          */
         if ($remaining <= 0) {
             return $out(self::DAILY);
         }
 
-        $workerConfigured =
-            trim((string) App::config('rank_worker_url', '')) !== '' &&
-            trim((string) App::config('rank_worker_secret', '')) !== '';
-
-        /*
-         * api_budget_day protects SerpApi fallback usage only.
-         *
-         * When the VPS worker is configured, do not reject the request here
-         * just because the SerpApi budget is exhausted. RankCheck will first
-         * try the VPS worker.
-         *
-         * If the VPS worker fails and no SerpApi budget remains, RankCheck
-         * returns a provider error instead of spending beyond the configured
-         * SerpApi budget or returning a misleading ranking result.
-         */
-        if (
-            !$workerConfigured &&
-            self::budgetUsed() >= App::settingInt('api_budget_day')
-        ) {
-            return $out(self::BUDGET);
-        }
-
         return $out(self::OK);
     }
 
-    public static function consume(string $visitor, int $apiCalls): void
+    public static function consume(string $visitor): void
     {
         $day = self::today();
 
         /*
-         * Every successful fresh rank check consumes one visitor check,
-         * whether the result came from the VPS worker or SerpApi.
+         * Every successful fresh rank check consumes one visitor check.
          */
         Db::run(
             'INSERT INTO usage_day (day, visitor, used) VALUES (?, ?, 1)
@@ -160,16 +125,5 @@ final class RateLimiter
             [$day, $visitor]
         );
 
-        /*
-         * Only real SerpApi calls consume the shared API budget.
-         * VPS results return api_calls = 0.
-         */
-        if ($apiCalls > 0) {
-            Db::run(
-                'INSERT INTO budget_day (day, calls) VALUES (?, ?)
-                 ON CONFLICT(day) DO UPDATE SET calls = calls + ?',
-                [$day, $apiCalls, $apiCalls]
-            );
-        }
     }
 }

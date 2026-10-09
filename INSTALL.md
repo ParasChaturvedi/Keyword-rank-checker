@@ -1,65 +1,20 @@
-# DoctorFizz Rank Checker - SerpApi-only install
+# DoctorFizz Rank Checker — install
 
-This build uses **SerpApi only** for all ranking searches.
+## Vercel
 
-## Upload location
+1. Import this repo in Vercel (framework preset: Other). `vercel.json` runs `api/*.php` on `vercel-php`.
+2. Set the environment variables listed in `README.md`.
+3. Deploy, then open `/api/index.php?a=health` — every check should be `true`
+   (`page_writable` is informational and is `false` on Vercel).
 
-Upload the contents of this folder to:
+## Shared hosting (optional)
 
-`public_html/keyword-rank-checker/`
+Upload the folder, keep `app/.htaccess` in place, set the same values in `app/config.php`
+(see `app/config.example.php`). Requires PHP 8.1+, cURL, PDO SQLite, OpenSSL and a writable `app/data/`.
 
-The final structure must contain `index.html`, `api/`, `app/`, `admin/`, and `assets/` directly inside that folder.
+## How a check works
 
-## Already configured
-
-`app/config.php` is included and already contains the SerpApi key supplied for this build, plus generated `app_key` and `ip_pepper` values.
-
-The SerpApi key never needs to be placed in HTML or JavaScript. PHP reads it server-side.
-
-## Hosting requirements
-
-- PHP 8.1+
-- cURL PHP extension
-- PDO SQLite PHP extension
-- OpenSSL PHP extension
-- `app/data/` writable by PHP
-
-Recommended permissions:
-- `app/config.php`: 600
-- `app/data/`: 700
-- files: 644
-- folders: 755
-
-## Test after upload
-
-Open:
-
-`https://itzfizz.com/keyword-rank-checker/api/index.php?a=health`
-
-All checks should be true.
-
-Then open:
-
-`https://itzfizz.com/keyword-rank-checker/api/index.php?a=session`
-
-It should return JSON with `"ok": true`.
-
-Finally open:
-
-`https://itzfizz.com/keyword-rank-checker/`
-
-and run a keyword check.
-
-## How searches work
-
-The server calls:
-
-`https://serpapi.com/search.json`
-
-with `engine=google`, keyword, country, language, result offset and the private SerpApi key.
-
-The app reads `organic_results`, matches the requested domain by hostname, and reports the organic position.
-
-## Important
-
-Do not move `app/config.php` to the public root. Keep `app/.htaccess` in place so the config and SQLite data cannot be requested directly.
+`POST /api/index.php?a=check` → `RankCheck::run()` → `POST {RANK_WORKER_URL}/rank`
+with `Authorization: Bearer {RANK_WORKER_SECRET}`. The worker answers within ~18.5 s
+(the PHP call times out at 20 s). Failed checks never show as "not ranking" and do not
+use the visitor's daily allowance.
